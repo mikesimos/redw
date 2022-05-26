@@ -1,0 +1,33 @@
+dpkg -i scala 2.12.0 debian from:
+https://www.scala-lang.org/download/2.12.0.html
+
+Download dataset datasets/enwiki-20220420-pages-articles1.xml-p1p41242.bz2 from https://dumps.wikimedia.org/enwiki/20220420/
+
+
+
+$ sudo apt update
+$ sudo apt install default-jdk -y
+$ curl -O https://archive.apache.org/dist/spark/spark-3.2.1/spark-3.2.1-bin-hadoop2.7.tgz
+$ tar xvf spark-3.2.1-bin-hadoop2.7.tgz
+$ sudo mkdir /opt/spark
+$ sudo chown $USER:$USER /opt/spark
+$ mv spark-3.2.1-bin-hadoop2.7/* /opt/spark
+$ nano ~/.bashrc
+export SPARK_HOME=/opt/spark
+export PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
+$ source ~/.bashrc
+
+start-master.sh
+start-worker.sh spark://localhost:7077
+
+https://spark.apache.org/docs/latest/api/python/getting_started/install.html
+
+
+conda create -n redw -y python=3.7 && conda activate redw
+pip install pyspark
+
+python etl.py
+pip install networkx
+
+sudo apt-get install libfreetype6-dev
+sudo apt install python3-numpy python3-scipy
