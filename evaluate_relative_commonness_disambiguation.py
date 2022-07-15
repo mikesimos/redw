@@ -1,8 +1,7 @@
-import json
-import os
+import time
 import pickle
-from etl_dataset import testa, testb
-#
+from etl_dataset import datasets
+
 with open("./warehouse/spotMapSR.pickle", 'rb') as f:
     d = pickle.load(f)
     spot_map = {}
@@ -36,7 +35,7 @@ def get_matches(tokens, max_ngram_size=6):
                 "length": i
             }
     return {
-        "Wikipedia_ID": None,
+        "Wikipedia_ID": -1,
         "anchor_text": tokens[0],
         "length": 1
     }
@@ -57,7 +56,7 @@ def get_total_matches(tokens, max_ngram_size=6):
     """
     max_total = 0
     max_match = {
-            "Wikipedia_ID": None,
+            "Wikipedia_ID": -1,
             "anchor_text": tokens[0],
             "length": 1
         }
@@ -98,7 +97,7 @@ def get_fuzzy_matches(tokens, max_ngram_size=6):
             }
     if not matches:
         matches[max_ngram_size] = {
-            "Wikipedia_ID": None,
+            "Wikipedia_ID": -1,
             "anchor_text": " ".join(tokens[0:max_ngram_size])
         }
     return matches
@@ -152,8 +151,7 @@ def fuzzy_spotter(text, max_ngram_size=10):
     cursor = 0
     spots = {}
     while cursor < l:
-        m = get_fuzzy_matches(tokens[cursor:cursor + max_ngram_size])
-        spots[cursor] = m
+        spots[cursor] = get_fuzzy_matches(tokens[cursor:cursor + max_ngram_size])
         cursor += 1
     return spots
 
@@ -171,11 +169,10 @@ def link_and_evaluate_spotted_dataset(dataset, methodology):
         anchor = d['mention'].lower()
         if d['mention_position'] in d['spots'] and \
                 d['mention_length'] == d['spots'][d['mention_position']]['length'] and \
-                int(d['Wikipedia_ID']) == commonness.get(anchor, {'id': None})['id']:
+                d.get('Wikipedia_ID') == commonness.get(anchor, {'id': -1})['id']:
             true_prediction += [1]
-            probabilities += [commonness[anchor][methodology]]
+            probabilities += [commonness.get(anchor, {methodology: 0.0})[methodology]]
         else:
-
             true_prediction += [0]
             spoted_mention_position = sorted(list(filter(lambda i: i <= d['mention_position'], d['spots'].keys())))[-1]
             anchor = d['spots'][spoted_mention_position]['anchor_text']
@@ -196,7 +193,7 @@ def link_and_evaluate_fuzzy_spotted_dataset(dataset, methodology):
         anchor = d['mention'].lower()
         if d['mention_position'] in d['spots'] and \
                 d['mention_length'] in d['spots'][d['mention_position']] and \
-                int(d['Wikipedia_ID']) == commonness.get(anchor, {'id': None})['id']:
+                d['Wikipedia_ID'] == commonness.get(anchor, {'id': -1})['id']:
             true_prediction += [1]
             probabilities += [commonness[anchor][methodology]]
         else:
@@ -208,44 +205,9 @@ def link_and_evaluate_fuzzy_spotted_dataset(dataset, methodology):
             prob = 0.0
             for spot in d['spots'][spoted_mention_position].values():
                 anchor = spot['anchor_text']
-                # if commonness.get(anchor, {methodology: 0.0})[methodology]>prob: #<
-                #     prob=commonness.get(anchor, {methodology: 0.0})[methodology] #<
                 prob += commonness.get(anchor, {methodology: 0.0})[methodology]
-            probabilities += [prob/len(d['spots'][spoted_mention_position])] #<  [prob]
+            probabilities += [prob/len(d['spots'][spoted_mention_position])]
     return true_prediction, probabilities
-
-def evaluate_spotter(spotted_dataset):
-    """
-    Performs an evaluation for the spotter
-    :param spotted_dataset:
-    :return:
-    """
-    hits = 0
-    misses = 0
-    ms = []
-    i = 0
-    for d in spotted_dataset:
-        if i>0:
-            i-=1
-            print (d)
-        if d['mention_position'] in d['spots'] and \
-                d['spots'][d['mention_position']]['length'] == d['mention_length']:
-            if d['spots'][d['mention_position']].get('Wikipedia_ID'):
-                if int(d['spots'][d['mention_position']].get('Wikipedia_ID')['id'])==int(d['Wikipedia_ID']):
-                    hits += 1
-                else:
-                    misses += 1
-            else:
-                misses += 1
-        else:
-            l = d['mention_position']
-            keys = list(filter(lambda i: i > l - 2 and i < l + 2, d['spots'].keys()))
-            v = {key: d['spots'][key] for key in keys}
-            print({'mention': d['mention'], 'v': v})
-            misses += 1
-    print(ms)
-    print('hits', hits)
-    print('misses', misses)
 
 
 def spot_dataset(dataset, spotter):
@@ -255,124 +217,66 @@ def spot_dataset(dataset, spotter):
     :param dataset:
     :return:
     """
-    spotted_dataset = []
-    c = 0
-    for d in dataset:
-        text = d['context_left'] + ' ' + d['mention'] + ' ' + d['context_right']
-        d['spots'] = spotter(text.lower())  # <<<<<< !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        spotted_dataset.append(d)
-    return spotted_dataset
+    processed_dataset = []
+    for di in dataset:
+        text = di['context_left'] + ' ' + di['mention'] + ' ' + di['context_right']
+        d = di.copy()
+        d['spots'] = spotter(text.lower())
+        processed_dataset.append(d)
+    return processed_dataset
 
 
 def pckl(path, data):
-    with open(path, 'wb') as f:
+    with open(path, 'wb') as fp:
         print('Saving', path)
-        pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-
-def evaluate(dataset):
-    """
-
-    :param dataset:
-    :return:
-    """
-    m = 0
-    m_sum = 0
-    m_max = 0
-    hit = 0
-    hit_first = 0
-    miss = 0
-    no_spot = 0
-    i=0
-    for d in dataset:
-        mention = d['mention']#.lower()
-        m += 1
-        m_max = len(mention.split()) if len(mention.split()) > m_max else m_max
-        m_sum += len(mention.split())
-        if mention in spot_map:
-            # print (spot_map[mention])
-            # return
-            # i+=1
-            # if i%100==0:
-            #     print (mention, type(commonness[mention]['id']), type(d['Wikipedia_ID']))
-
-            if int(d['Wikipedia_ID']) == int(spot_map[mention]['id']):
-                hit += 1
-            else:
-                miss+=1
-                # if mention in commonness and int(commonness[mention]['id'])==int(d['Wikipedia_ID']):
-                #     hit += 1
-                # else:
-                #     miss+=1
-            # if d['Wikipedia_ID'] in spot_map[mention][0]:
-            #     hit_first += 1
-        else:
-            no_spot += 1
-            # if mention in commonness and int(commonness[mention]['id']) == int(d['Wikipedia_ID']):
-            #     hit += 1
-            # else:
-            #
-            #     miss += 1
-            # print(d)
-
-    print('hit', hit)
-    print('miss ', miss)
-    print('no_spot', no_spot)
-    print('---')
-    print('m_max', m_max)
-    print('msum ', m_sum)
-    print('m', m)
-    print('m_avg', float(m_sum) / float(m))
+        pickle.dump(data, fp, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def evaluate_run_time(dataset, method):
     """
 
-    :param dataset:
+    :param method: The method being time evaluated
+    :param dataset: The dataset for time evaluation
     :return:
     """
-    methodology = 'SR_norm'
-    import time
     start = time.time()
-    for d in dataset:
-        text = (d['context_left'] + ' ' + d['mention'] + ' ' + d['context_right']).lower()
-        spots = fuzzy_spotter(text)
+    for di in dataset:
+        text = (di['context_left'] + ' ' + di['mention'] + ' ' + di['context_right']).lower()
+        spots = spotter(text, max_ngram_size=6)
         for s in spots.values():
-            for e in s.values():
-                o = spot_map.get(e['anchor_text'], {methodology: 0.0})[methodology]
+            outcome = commonness.get(s['anchor_text'], {method: 0.0})[method]
     timing = time.time() - start
-    print ("--- -%s seconds --" % timing)
+    print("--- %s seconds ---" % timing)
+
+
+def evaluate_fuzzy_run_time(dataset, method):
+    """
+
+    :param method: The method being time evaluated
+    :param dataset: The dataset for time evaluation
+    :return:
+    """
+    start = time.time()
+    for di in dataset:
+        text = (di['context_left'] + ' ' + di['mention'] + ' ' + di['context_right']).lower()
+        spots = fuzzy_spotter(text, max_ngram_size=6)
+        for s in spots.values():
+            for i in s.values():
+                outcome = commonness.get(i['anchor_text'], {method: 0.0})[method]
+    timing = time.time() - start
+    print("---- %s seconds ---" % timing)
 
 if __name__ == '__main__':
-    # for method in ['commonness', 'relative_commonness']:
-    #     print(method, '\ntesta:')
-    #     evaluate_run_time(testa, method)
-    #     print('testb:')
-    #     evaluate_run_time(testb, method)
-    evaluate_run_time(testb,  'relative_commonness')
-    evaluate_run_time(testa,  'relative_commonness')
-    # spotted_dataset = spot_dataset(testb, spotter)
-    #
-    # for method in ['commonness', 'relative_commonness']:
-    #     y_true, probs = link_and_evaluate_spotted_dataset(spotted_dataset, method)
-    #     pckl('results/'+method+'_y_true', y_true)
-    #     pckl('results/'+method+'_probs', probs)
-    # spotted_dataset = spot_dataset(testb, total_spotter)
-    # # for method in ['commonness', 'relative_commonness']:
-    # #     y_true, probs = link_and_evaluate_spotted_dataset(spotted_dataset, method)
-    # #     pckl('results/total_'+method+'_y_true', y_true)
-    # #     pckl('results/total_'+method+'_probs', probs)
-    # fuzzy_spotted_dataset = spot_dataset(testb, fuzzy_spotter)
-    # for method in ['commonness', 'relative_commonness']:
-    #     y_true, probs = link_and_evaluate_fuzzy_spotted_dataset(fuzzy_spotted_dataset, method)
-    #     pckl('results/fuzzy_'+method+'_y_true', y_true)
-    #     pckl('results/fuzzy_'+method+'_probs', probs)
-
-    #
-    # # print ('-0----------------------',spotted_dataset[0])
-    # print('evaluating spotter')
-    # # evaluate_spotter(spotted_dataset)
-    # # evaluate(testa)
-    # y_true_m1, probs_m1 = link_and_evaluate_spotted_dataset(spotted_dataset, 'commonness')
-    # pckl('results/m1_y_true', y_true_m1)
-    # pckl('results/m1_probs', probs_m1)
+    for name, dtset in datasets.items():
+        print(name, '- relative commonness')
+        evaluate_run_time(dtset, 'relative_commonness')
+        print('fuzzy')
+        evaluate_fuzzy_run_time(dtset, 'relative_commonness')
+        spotted_dataset = spot_dataset(dtset, spotter)
+        y_true, probs = link_and_evaluate_spotted_dataset(spotted_dataset, 'relative_commonness')
+        pckl('results/' + name + '_relative_commonness_y_true', y_true)
+        pckl('results/' + name + '_relative_commonness_probs', probs)
+        fuzzy_spotted_dataset = spot_dataset(dtset, fuzzy_spotter)
+        fuzzy_y_true, fuzzy_probs = link_and_evaluate_fuzzy_spotted_dataset(fuzzy_spotted_dataset, 'relative_commonness')
+        pckl('results/' + name + '_fuzzy_relative_commonness_y_true', fuzzy_y_true)
+        pckl('results/' + name + '_fuzzy_relative_commonness_probs', fuzzy_probs)

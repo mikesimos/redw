@@ -27,7 +27,6 @@ conda create -n redw -y python=3.7 && conda activate redw
 pip install pyspark
 
 python etl.py
-pip install networkx
 
 sudo apt-get install libfreetype6-dev
 sudo apt install python3-numpy python3-scipy
