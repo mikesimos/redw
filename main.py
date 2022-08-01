@@ -1,3 +1,18 @@
+# This file is part of fast-wikification.
+#
+# Fast-wikification is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your option)
+# any later version.
+
+# Fast-wikification is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+# details.
+
+# You should have received a copy of the GNU General Public License along with
+# fast-wikification. If not, see <https://www.gnu.org/licenses/>.
+
 # -*- coding: utf-8 -*-
 import os
 import shutil
@@ -45,7 +60,7 @@ equals = udf(lambda first, second: 1 if first == second else 0, IntegerType())
 min_max_norm = udf(lambda v, mn, mx: 0.0 if mx == mn else (v - mn) / (mx - mn), FloatType())
 second_max_diff = udf(lambda count, max_count: count if count == max_count else max_count - count, IntegerType())
 
-# TODO: refine split
+
 refine_udf = udf(lambda l: [l] + [i for i in l.replace('/', ' ').split()], ArrayType(StringType()))
 
 
@@ -89,7 +104,6 @@ class ETL:
             print(e)
 
     """
-    Confirmed
     +------+---+-----------+-------------------+--------------------+
     |    id| ns|redirect_to|           text    |               title|
     +------+---+-----------+-------------------+--------------------+
@@ -115,7 +129,7 @@ class ETL:
         )
         return articles
 
-    """ CONFIRMED
+    """
         +------+------------------------------+------------------+
         |id    |entity_title                  |anchor            |
         +------+------------------------------+------------------+
@@ -159,7 +173,7 @@ class ETL:
             element_at(col("wikilinks"), -1).alias("anchor"),
         )
 
-    """ Confirmed
+    """
     +----------+---------+
     |article_id|entity_id|
     +----------+---------+
@@ -199,7 +213,6 @@ class ETL:
                 second_or_fist(redirect_map.redirect_id0, redirect_map.redirect_id).alias('redirect_id'),
                 has_val(redirect_map.has_redirect0).alias('has_redirect')
             )
-            print('Count:', redirect_map.filter(redirect_map.has_redirect == True).count())
             return redirect_map
 
         redir_map = iterate(iterate(iterate(redir_map)))
@@ -213,7 +226,7 @@ class ETL:
             col('entity_id')
         )
 
-    """ Confirmed
+    """
     +----------+---------+---+--------------------+
     |article_id|entity_id| ns|               title|
     +----------+---------+---+--------------------+
@@ -303,22 +316,8 @@ class ETL:
             e.entity_id
         )
 
-    # @warehouse(os.path.join(FDIR, "warehouse/redw_spot_map_anchorid_format.parquet"))
-    # def load_redw_spot_map_anchorid(self):
-    #     sm = self.load_redw_spot_map()
-    #     anchors = self.load_anchors_ids()
-    #     return sm \
-    #         .join(
-    #             anchors,
-    #             sm.title == anchors.anchor_text,
-    #             'left'
-    #         ) \
-    #         .drop(
-    #             'title',
-    #             'anchor_text'
-    #         )
 
-    """ M<<<
+    """
     +--------------------+---------+---+-------+---------------+                    
     |               title|entity_id| SR|SR_norm|SR_min_max_norm|
     +--------------------+---------+---+-------+---------------+
@@ -356,14 +355,7 @@ class ETL:
         sr = sr.na.fill(value=0.0)
         return sr
 
-        # e = e.withColumn('total', f.sum(col('count')).over(Window.partitionBy('anchor_id')))
-        # e = e.withColumn('commonness', col('count') / col('total'))
-        # e = e.select(e.entity_id, e.anchor_id, e.commonness)
-
-    # @warehouse(os.path.join(FDIR, "warehouse/redw_sr_norm.parquet"))
-    # def load_redw_sr_norm(self):
-
-    """ * confirmed
+    """
     +-----------------+--------------------+---------+                              
     |source_article_id|              anchor|entity_id|
     +-----------------+--------------------+---------+
@@ -394,12 +386,10 @@ class ETL:
             .select(
             col('source_article_id'),
             lower(articles.title).alias('anchor'),
-            #explode(refine_udf(col('title'))).alias("anchor"),
             col('entity_id')
-        ) #\
-           # .filter(~col('anchor').isin(*stopwords))
+        )
 
-    """ ???
+    """
         +-----------------+----------------+---------+
         |source_article_id|          anchor|entity_id|
         +-----------------+----------------+---------+
@@ -416,9 +406,6 @@ class ETL:
         entities = self.load_entities()
         links = self.load_article_links()
         links = links.join(entities, links.entity_title == entities.title, 'left')
-        print('Null Join links:', links.filter(links.title.isNull()).count())
-        print('Not Null Join links:', links.filter(links.title.isNotNull()).count())
-        print('NS Join links:', links.filter(links.ns != 0).count())
         return links \
             .filter(links.ns == 0) \
             .filter(links.title.isNotNull()) \
@@ -428,7 +415,7 @@ class ETL:
             entities.entity_id
         )
 
-    """ * confirmed
+    """
     +-----------------+--------------------+---------+                              
     |source_article_id|              anchor|entity_id|
     +-----------------+--------------------+---------+
@@ -443,10 +430,6 @@ class ETL:
         entities = self.load_entities()
         links = self.load_article_links()
         links = links.join(entities, links.entity_title == entities.title, 'left')
-        # links.filter(links.title.isNull()).show(500, False)
-        # print('Null Join links:', links.filter(links.title.isNull()).count())
-        # print('Not Null Join links:', links.filter(links.title.isNotNull()).count())
-        # print('NS Join links:', links.filter(links.ns != 0).count())
 
 
         links = links \
@@ -455,22 +438,15 @@ class ETL:
             .select(
             links.id.alias('source_article_id'),
             lower(links.anchor).alias('anchor'),
-            #refine_udf(lower(links.anchor)).alias('anchor'),  # expand link coverage <<<
             entities.entity_id
         )
-        # \
-        #     .select(
-        #     col('source_article_id'),
-        #     explode(col('anchor')).alias('anchor'),
-        #     col('entity_id')
-        # )
 
         additional_links = self.load_additional_title_links()
         links = links.union(additional_links)
         links.show(100, False)
         return links
 
-    """ * confirmed
+    """
     +----------------------------------------------------+-------------+
     |anchor_text                                         |anchor_id    |
     +----------------------------------------------------+-------------+
@@ -500,7 +476,7 @@ class ETL:
         anchors = anchors.filter(~anchors.anchor_text.isin(*stopwords))
         return anchors
 
-    """ * confirmed
+    """
     +-----------------+---------+------------+
     |source_article_id|entity_id|   anchor_id|
     +-----------------+---------+------------+
@@ -522,7 +498,7 @@ class ETL:
         return links.select(links.source_article_id.cast(IntegerType()), links.entity_id.cast(IntegerType()),
                             links.anchor_id)
 
-    """ * confirmed
+    """
     +---------+---------+-----+-----+-------------------+                           
     |anchor_id|entity_id|count|total|         commonness|
     +---------+---------+-----+-----+-------------------+
@@ -543,17 +519,13 @@ class ETL:
         e = e.withColumn('commonness', col('count') / col('total'))
         return e
 
-    # +---------+------------+---------------------+
-    # |entity_id|anchor_id   |commonness           |
-    # +---------+------------+---------------------+
-    # |6144480  |970662609999|4.1841004184100416E-4|
     @warehouse(os.path.join(FDIR, "warehouse/commonness.parquet"))
     def load_commonness(self):
         e = self.load_counted_commonness()
         e = e.select(e.entity_id, e.anchor_id, e.commonness)
         return e
 
-    """ * confirmed
+    """
     +---------+-----+-----+----------+---------+--------------------+               
     |entity_id|count|total|commonness|max_count|         anchor_text|
     +---------+-----+-----+----------+---------+--------------------+
@@ -569,12 +541,10 @@ class ETL:
         a = self.load_anchors_ids().withColumnRenamed("anchor_id", "a_id")
         j = e.join(a, e.anchor_id == a.a_id, 'left')
         j = j.drop('a_id', 'anchor_id')
-        j.show(10)
-        print('showed')
         return j
 
 
-    """ * confirmed
+    """
     +---------+-----+------------------+--------+-------------------+--------------------+
     |entity_id|total|        commonness|max_diff|relative_commonness|         anchor_text|
     +---------+-----+------------------+--------+-------------------+--------------------+
@@ -634,12 +604,7 @@ class ETL:
 
     def pickle_commonness(self):
         j = self.load_commonness()
-        print('Collecting Commonness')
         c = j.rdd.toLocalIterator(prefetchPartitions=True)
-        print('Collected Commonness')
-        # for row in c:
-        #     print (list(row))
-        #     return
         d = {}
         for row in c:
             if row['anchor_id'] in d:
@@ -652,12 +617,7 @@ class ETL:
 
     def pickle_anchor_commonness(self):
         j = self.load_anchor_commonness()
-        print('Collecting Anchor Commonness')
         c = j.rdd.toLocalIterator(prefetchPartitions=True)
-        print('Collected Anchor Commonness')
-        # for row in c:
-        #     print (list(row))
-        #     return
         d = {}
         for row in c:
             if row['anchor_text'] in d:
@@ -670,9 +630,7 @@ class ETL:
 
     def pickle_max_commonness(self):
         j = self.load_max_commonness()
-        print('Collecting Max Commonness')
         c = j.collect()
-        print('Collected max Commonness')
         d = {}
         for row in c:
             d[row['anchor_text']] = {'id': int(row['entity_id']), 'commonness': float(row['commonness']), 'total': int(row['total'])}
@@ -682,9 +640,7 @@ class ETL:
 
     def pickle_max_relative_commonness(self):
         j = self.load_max_relative_commonness()
-        print('Collecting Max Relative Commonness')
         c = j.collect()
-        print('Collected Max Relative Commonness')
         d = {}
         for row in c:
             d[row['anchor_text']] = {'id': int(row['entity_id']), 'commonness': float(row['commonness']),'relative_commonness': float(row['relative_commonness']), 'total': int(row['total'])}
@@ -705,20 +661,5 @@ class ETL:
 
 if __name__ == "__main__":
     etl = ETL()
-    etl.pickle_max_relative_commonness()
+    etl.pickle_spot_map_sr()
 
-    # l = etl.load_max_commonness()
-    # l.show(100)
-    # c = etl.load_max_commonness()
-    # print(c.select(c.anchor_text).distinct().count())
-    # c.show(10)
-    # c = etl.load_counted_commonness()
-    # print(c.select(c.anchor_id).distinct().count())
-    # etl.pickle_max_commonness()
-    # print(s.count())
-    # print(s.select(s.title).distinct().count())
-    # s.filter(s.title.isNull()).show(100)
-    # print('>0', s.filter(s.SR_min_max_norm > 0.0).count())
-    # print('all', s.count())
-
-    # etl.pickle_spot_map_sr()
